@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "719415357807",
+    "project_id": "diarystore",
+    "storage_bucket": "diarystore.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:719415357807:android:d190e09912d39ae330f89a",
+        "android_client_info": {
+          "package_name": "com.taggerlog"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "719415357807-d94onq599gu7tm8og1jdl8p9lrpcjhkm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAowQbah7cKqmfko6pU8eEA4CYSnfK1kjc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "719415357807-d94onq599gu7tm8og1jdl8p9lrpcjhkm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

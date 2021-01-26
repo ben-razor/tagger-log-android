@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -31,6 +32,7 @@ import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
@@ -45,8 +47,10 @@ import com.google.auth.oauth2.GoogleCredentials;
 
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.google.gson.reflect.TypeToken;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
@@ -132,37 +136,163 @@ public class MainActivity extends AppCompatActivity {
                             .build(),
                     RC_SIGN_IN);
         }
-        
-        @JavascriptInterface
-        public void getEntries() {
-            Query q = db.collection("diary-entry").orderBy("date", Query.Direction.DESCENDING)
-                    .whereEqualTo("uid", user.getUid())
-                    .limit(10);
 
-            q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+        public void runJavascript(String js, ValueCallback<String> valueCallback) {
+            webView.post(new Runnable() {
+                @Override
+                public void run() {
+                    webView.evaluateJavascript(js, valueCallback);
+                }
+            });
+        }
+
+        /**
+         * WebView.evaluateJavascript returns an escaped string wrapped in double quotes.
+         *
+         * This function turns this into a string that will be valid when passed to a JSON
+         * parser.
+         *
+         * @param s The input string
+         * @return The cleaned String
+         */
+        public String cleanReceivedJSON(String s) {
+            return s.substring(1, s.length() - 1)
+                    .replace("\\\\", "\\")
+                    .replace("\\\"", "\"");
+        }
+
+        public void runGetEntriesQuery(Query q) {
+            q.get(Source.CACHE).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                 @Override
                 public void onComplete(@NonNull Task<QuerySnapshot> task) {
                     if(task.isSuccessful()) {
+                        Date mostRecentModify = new Date(1955, 10, 21, 6, 15, 0);
+                        int numCachedEntries = task.getResult().size();
+
                         for(QueryDocumentSnapshot doc : task.getResult()) {
                             Map<String, Object> data = doc.getData();
-                            Timestamp dateTS = (Timestamp)data.get("date");
-                            data.put("date", dateToISO(dateTS.toDate()));
-                            Timestamp dateModifiedTS = (Timestamp)data.get("date-modified");
-                            data.put("date-modified", dateToISO(dateModifiedTS.toDate()));
-                            data.put("entry", data.get("entry").toString().replaceAll("\\n", "\\\\n"));
-                            data.put("id", doc.getId());
+                            Date dateModified = ((Timestamp)data.get("date-modified")).toDate();
+                            String json = entryToJSON(doc.getId(), data);
 
-                            String json = gson.toJson(data);
                             webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+
+                            if(dateModified.getTime() > mostRecentModify.getTime()) {
+                                mostRecentModify = dateModified;
+                            }
                         }
                         webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
                         webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+
+                        Query q = db.collection("diary-entry")
+                                .orderBy("date-modified", Query.Direction.DESCENDING)
+                                .whereEqualTo("uid", user.getUid());
+
+                        if(numCachedEntries > 0) {
+                            q.whereGreaterThan("date-modified", mostRecentModify);
+                        }
+
+                        q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                            @Override
+                            public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                                if (task.isSuccessful()) {
+                                    if(task.getResult().size() > 0) {
+                                        for(QueryDocumentSnapshot doc : task.getResult()) {
+                                            Map<String, Object> data = doc.getData();
+                                            String json = entryToJSON(doc.getId(), data);
+
+                                            webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+                                        }
+
+                                        webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
+                                        webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+                                    }
+                                    webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+                                }
+                            }
+                        });
                     }
                     else {
                         Log.w(TAG, "Error getting documents.", task.getException());
                     }
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void getEntries() {
+            webView.post(new Runnable() {
+                @Override
+                public void run() {
+
+                    webView.evaluateJavascript("taggerlog.json(taggerlog.queryTags)", new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String s) {
+                             Query q = db.collection("diary-entry")
+                                     .orderBy("date", Query.Direction.DESCENDING)
+                                     .whereEqualTo("uid", user.getUid())
+                                     .limit(10);
+
+                             s = cleanReceivedJSON(s);
+                             List<String> queryTags = gson.fromJson(s, new TypeToken<List<String>>(){}.getType());
+                             Log.d("qt", queryTags.toString());
+                             if(queryTags.size() > 0) {
+                                 q = q.whereArrayContainsAny("tag-list", queryTags);
+                             }
+                             else {
+                                 q = q.limit(10);
+                             }
+
+                             runGetEntriesQuery(q);
+                         }
+                     });
+                 }
+             });
+        }
+
+        @JavascriptInterface
+        public void getTags() {
+           db.collection("diary-tags").document(user.getUid())
+                   .get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
+               @Override
+               public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                   if (task.isSuccessful()) {
+                       DocumentSnapshot doc = task.getResult();
+                       Map<String, Object> data = doc.getData();
+                       String tags = (String)data.get("tags");
+                       webView.evaluateJavascript(String.format("taggerlog.setAllTags('%s');", tags), null);
+                   }
+
+                   db.collection("diary-tag-combos").document(user.getUid())
+                           .get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
+                       @Override
+                       public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                           if (task.isSuccessful()) {
+                               DocumentSnapshot doc = task.getResult();
+                               Map<String, Object> data = doc.getData();
+                               String dataJSON = gson.toJson(data.get("tag-combos"));
+
+                                webView.evaluateJavascript(
+                                        String.format("taggerlog.setTagCombos('%s', true);", dataJSON),
+                                null
+                                );
+                           }
+                       }
+                   });
+               }
+           });
+        }
+
+        public String entryToJSON(String id, Map<String, Object> data) {
+            Timestamp dateTS = (Timestamp)data.get("date");
+            Timestamp dateModifiedTS = (Timestamp)data.get("date-modified");
+            Date dateModified = dateModifiedTS.toDate();
+            data.put("date", dateToISO(dateTS.toDate()));
+            data.put("date-modified", dateToISO(dateModifiedTS.toDate()));
+            data.put("entry", data.get("entry").toString().replaceAll("\\n", "\\\\n"));
+            data.put("id", id);
+
+            String json = gson.toJson(data);
+            return json;
         }
 
         /**

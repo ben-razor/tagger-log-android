@@ -27,19 +27,39 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.firestore.Source;
 import com.google.gson.Gson;
 
+/*
+import com.google.auth.oauth2.GoogleCredentials;
+
+ */
+
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
+
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 public class MainActivity extends AppCompatActivity {
 
+    private Gson gson;
     private FirebaseAuth mAuth;
+    private FirebaseFirestore db;
+    private FirebaseUser user;
     private WebView webView;
     private String TAG = "MainActivity";
     private static final int RC_SIGN_IN = 123;
@@ -49,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
 
         WebView.setWebContentsDebuggingEnabled(true);
         webView = (WebView) findViewById(R.id.webview);
@@ -111,6 +132,52 @@ public class MainActivity extends AppCompatActivity {
                             .build(),
                     RC_SIGN_IN);
         }
+        
+        @JavascriptInterface
+        public void getEntries() {
+            Query q = db.collection("diary-entry").orderBy("date", Query.Direction.DESCENDING)
+                    .whereEqualTo("uid", user.getUid())
+                    .limit(10);
+
+            q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                @Override
+                public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                    if(task.isSuccessful()) {
+                        for(QueryDocumentSnapshot doc : task.getResult()) {
+                            Map<String, Object> data = doc.getData();
+                            Timestamp dateTS = (Timestamp)data.get("date");
+                            data.put("date", dateToISO(dateTS.toDate()));
+                            Timestamp dateModifiedTS = (Timestamp)data.get("date-modified");
+                            data.put("date-modified", dateToISO(dateModifiedTS.toDate()));
+                            data.put("entry", data.get("entry").toString().replaceAll("\\n", "\\\\n"));
+                            data.put("id", doc.getId());
+
+                            String json = gson.toJson(data);
+                            webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+                        }
+                        webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
+                        webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+                    }
+                    else {
+                        Log.w(TAG, "Error getting documents.", task.getException());
+                    }
+                }
+            });
+        }
+
+        /**
+         * Convert date to ISO 8601 format.
+         *
+         * @param d A Date object
+         * @return A date string
+         */
+        public String dateToISO(Date d) {
+            SimpleDateFormat sdf;
+            sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+            String text = sdf.format(d);
+            return text;
+        }
     }
 
     @Override
@@ -122,9 +189,9 @@ public class MainActivity extends AppCompatActivity {
 
             if (resultCode == RESULT_OK) {
                 // Successfully signed in
-                FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                user = FirebaseAuth.getInstance().getCurrentUser();
 
-                Gson gson = new Gson();
+                gson = new Gson();
                 Map<String, String> userData = new HashMap<String, String>();
                 userData.put("uid", user.getUid());
                 userData.put("displayName", user.getDisplayName());

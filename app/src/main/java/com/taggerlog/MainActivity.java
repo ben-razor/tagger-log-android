@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Message;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -43,6 +44,7 @@ import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.Source;
+import com.google.firebase.firestore.WriteBatch;
 import com.google.gson.Gson;
 
 /*
@@ -52,6 +54,7 @@ import com.google.auth.oauth2.GoogleCredentials;
 
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.text.SimpleDateFormat;
@@ -146,8 +149,41 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void addEntry(Object o) {
+        public void addEntry(String entryJSON) {
+            Log.d("addEntry", entryJSON);
+            Entry e = entryFromJSON(entryJSON);
+            Map<String, Object> dataUpdate = new HashMap<String, Object>();
+            dataUpdate.put("entry", e.entry);
+            dataUpdate.put("date", new Timestamp(e.date));
+            dataUpdate.put("date-modified", FieldValue.serverTimestamp());
+            dataUpdate.put("tag-list", e.tagList);
+            dataUpdate.put("uid", user.getUid());
+            CollectionReference diaryEntryRef = db.collection("diary-entry");
+            CollectionReference tagsColRef = db.collection("diary-tags");
+            DocumentReference newEntryRef = diaryEntryRef.document();
+            DocumentReference tagsDocRef = tagsColRef.document(user.getUid());
 
+            runJavascript("taggerlog.json(taggerlog.allTags)" , new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String s) {
+                    s = cleanReceivedJSON(s);
+                    List<String> allTags = gson.fromJson(s, new TypeToken<List<String>>(){}.getType());
+                    String allTagsCSV = TextUtils.join(",", allTags);
+                    Log.d("all tags CSV", allTagsCSV);
+
+                    WriteBatch batch = db.batch();
+                    batch.set(newEntryRef, dataUpdate);
+                    Map<String, Object> tagsDoc = new HashMap<>();
+                    tagsDoc.put("tags", allTagsCSV);
+                    batch.set(tagsDocRef, tagsDoc);
+                    batch.commit().addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.e("addEntry", e.toString());
+                        }
+                    });
+                }
+            });
         }
 
         @JavascriptInterface
@@ -335,6 +371,24 @@ public class MainActivity extends AppCompatActivity {
 
             String json = gson.toJson(data);
             return json;
+        }
+
+        class Entry {
+            @SerializedName("uid")
+            public String uid;
+            @SerializedName("entry")
+            public String entry;
+            @SerializedName("date")
+            public Date date;
+            @SerializedName("date-modified")
+            public Date dateModified;
+            @SerializedName("tag-list")
+            public ArrayList<String> tagList;
+        }
+
+        public Entry entryFromJSON(String entryJSON) {
+            Entry entry = gson.fromJson(entryJSON, Entry.class);
+            return entry;
         }
 
         /**

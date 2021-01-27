@@ -462,6 +462,47 @@ public class MainActivity extends AppCompatActivity {
            });
         }
 
+        class TagCombo {
+            @SerializedName("title")
+            public String title;
+            @SerializedName("tags")
+            public String tags;
+        }
+
+        /**
+         * Save the array of favourite tag combinations to the db.
+         */
+        @JavascriptInterface
+        public void saveTagCombos() {
+            runJS("taggerlog.json(taggerlog.tagCombos)", new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String s) {
+                    s = cleanReceivedJSON(s);
+                    Log.d("saveTagCombos", s);
+                    List<TagCombo> tagCombos = gson.fromJson(s, new TypeToken<List<TagCombo>>(){}.getType());
+                    ArrayList<Map<String, Object>> tagCombosFirestore = new ArrayList<Map<String, Object>>();
+                    for(TagCombo t: tagCombos) {
+                        HashMap<String, Object> tagCombo = new HashMap<>();
+                        tagCombo.put("title", t.title);
+                        tagCombo.put("tags", t.tags);
+                        tagCombosFirestore.add(tagCombo);
+                    }
+                    Map<String, Object> firestoreDoc = new HashMap<>();
+                    firestoreDoc.put("tag-combos", tagCombosFirestore);
+
+                    CollectionReference colRef = db.collection("diary-tag-combos");
+                    DocumentReference docRef = colRef.document(user.getUid());
+                    docRef.set(firestoreDoc).addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.e("saveTagCombos", e.toString());
+                        }
+                    });
+
+                }
+            });
+        }
+
         public String entryToJSON(String id, Map<String, Object> data) {
             Timestamp dateTS = (Timestamp)data.get("date");
             Timestamp dateModifiedTS = (Timestamp)data.get("date-modified");

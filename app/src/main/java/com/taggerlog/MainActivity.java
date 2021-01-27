@@ -146,7 +146,6 @@ public class MainActivity extends AppCompatActivity {
                             user = null;
                             webView.evaluateJavascript("taggerlog.setUser(null);", null);
                             init();
-                            Log.d("SOUT", "I out");
                         }
                     });
         }

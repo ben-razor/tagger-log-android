@@ -107,7 +107,6 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     webView.evaluateJavascript("taggerlog.init();", null);
-                    webView.evaluateJavascript("taggerlog.updateLoggedInUI();", null);
                 }
             });
         }
@@ -135,6 +134,21 @@ public class MainActivity extends AppCompatActivity {
                             .setAvailableProviders(providers)
                             .build(),
                     RC_SIGN_IN);
+        }
+
+        @JavascriptInterface
+        public void logOut() {
+            AuthUI.getInstance()
+                    .signOut(mContext)
+                    .addOnCompleteListener(new OnCompleteListener<Void>() {
+                        @Override
+                        public void onComplete(@NonNull Task<Void> task) {
+                            user = null;
+                            webView.evaluateJavascript("taggerlog.setUser(null);", null);
+                            init();
+                            Log.d("SOUT", "I out");
+                        }
+                    });
         }
 
         public void runJavascript(String js, ValueCallback<String> valueCallback) {

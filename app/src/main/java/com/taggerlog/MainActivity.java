@@ -25,6 +25,8 @@ import com.firebase.ui.auth.AuthUI;
 import com.firebase.ui.auth.IdpResponse;
 import com.firebase.ui.auth.data.model.User;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -32,7 +34,10 @@ import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
@@ -113,7 +118,31 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void deleteEntry(String id) {
+            CollectionReference diaryEntryRef = db.collection("diary-entry");
+            DocumentReference docRef = diaryEntryRef.document(id);
 
+            docRef.get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
+                    @Override
+                    public void onSuccess(DocumentSnapshot documentSnapshot) {
+                        Map<String, Object> data = documentSnapshot.getData();
+                        ArrayList<String> tagList = (ArrayList<String>)data.get("tag-list");
+                        Map<String, Object> dataUpdate = new HashMap<String, Object>();
+                        dataUpdate.put("deleted", true);
+                        dataUpdate.put("date-modified", FieldValue.serverTimestamp());
+
+                        docRef.update(dataUpdate).addOnSuccessListener(new OnSuccessListener<Void>() {
+                            @Override
+                            public void onSuccess(Void aVoid) {
+                                Log.d("DELETE", "deletedRecord");
+                            }
+                        });
+                    }
+                }).addOnFailureListener(new OnFailureListener() {
+                @Override
+                public void onFailure(@NonNull Exception e) {
+                    Log.d("deleteEntry", e.toString());
+                }
+            });
         }
 
         @JavascriptInterface

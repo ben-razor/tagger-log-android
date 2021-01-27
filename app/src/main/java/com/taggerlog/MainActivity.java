@@ -29,6 +29,8 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
+import com.google.common.base.Predicates;
+import com.google.common.collect.Collections2;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.Timestamp;
@@ -62,8 +64,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 public class MainActivity extends AppCompatActivity {
@@ -136,6 +140,7 @@ public class MainActivity extends AppCompatActivity {
                         docRef.update(dataUpdate).addOnSuccessListener(new OnSuccessListener<Void>() {
                             @Override
                             public void onSuccess(Void aVoid) {
+                                deleteOrphanTags(tagList);
                                 Log.d("DELETE", "deletedRecord");
                             }
                         });
@@ -149,8 +154,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void addEntry(String entryJSON) {
-            Log.d("addEntry", entryJSON);
+        public String addEntry(String entryJSON) {
             Entry e = entryFromJSON(entryJSON);
             Map<String, Object> dataUpdate = new HashMap<String, Object>();
             dataUpdate.put("entry", e.entry);
@@ -163,13 +167,12 @@ public class MainActivity extends AppCompatActivity {
             DocumentReference newEntryRef = diaryEntryRef.document();
             DocumentReference tagsDocRef = tagsColRef.document(user.getUid());
 
-            runJavascript("taggerlog.json(taggerlog.allTags)" , new ValueCallback<String>() {
+            runJS("taggerlog.json(taggerlog.allTags)" , new ValueCallback<String>() {
                 @Override
                 public void onReceiveValue(String s) {
                     s = cleanReceivedJSON(s);
                     List<String> allTags = gson.fromJson(s, new TypeToken<List<String>>(){}.getType());
                     String allTagsCSV = TextUtils.join(",", allTags);
-                    Log.d("all tags CSV", allTagsCSV);
 
                     WriteBatch batch = db.batch();
                     batch.set(newEntryRef, dataUpdate);
@@ -184,6 +187,105 @@ public class MainActivity extends AppCompatActivity {
                     });
                 }
             });
+
+            return newEntryRef.getId();
+        }
+
+        @JavascriptInterface
+        public void editEntry(String id, String currentEntryJSON, String entryJSON) {
+            CollectionReference diaryColRef = db.collection("diary-entry");
+
+            Entry currentEntry = gson.fromJson(currentEntryJSON, Entry.class);
+            Entry entry = gson.fromJson(entryJSON, Entry.class);
+
+            ArrayList<String> tagsRemoved = new ArrayList<>(currentEntry.tagList);
+            tagsRemoved.removeAll(entry.tagList);
+
+            Map<String, Object> entryFirebase = new HashMap<>();
+            entryFirebase.put("date-modified", FieldValue.serverTimestamp());
+            entryFirebase.put("date", entry.date);
+            entryFirebase.put("entry", entry.entry);
+            entryFirebase.put("tag-list", entry.tagList);
+            diaryColRef.document(id).update(entryFirebase).addOnSuccessListener(new OnSuccessListener<Void>() {
+                @Override
+                public void onSuccess(Void aVoid) {
+                    deleteOrphanTags(tagsRemoved);
+                    runJS("taggerlog.updateQueryRelatedTags(); taggerlog.refreshEntryDisplay();", null);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void saveTags() {
+            CollectionReference diaryTagsColRef = db.collection("diary-tags");
+
+            runJS("taggerlog.json(taggerlog.allTags)", new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String s) {
+                    s = cleanReceivedJSON(s);
+                    List<String> allTags = gson.fromJson(s, new TypeToken<List<String>>() {
+                    }.getType());
+                    String allTagsCSV = TextUtils.join(",", allTags);
+                    Map<String, String> tagsFirestore = new HashMap<>();
+                    tagsFirestore.put("tags", allTagsCSV);
+
+                    diaryTagsColRef.document(user.getUid()).set(tagsFirestore)
+                        .addOnSuccessListener(new OnSuccessListener<Void>() {
+                            @Override
+                            public void onSuccess(Void aVoid) {
+                                runJS("taggerlog.saveTagsRefresh()", null);
+                            }
+                        })
+                        .addOnFailureListener(new OnFailureListener() {
+                            @Override
+                            public void onFailure(@NonNull Exception e) {
+                                Log.e("saveTags", e.toString());
+                            }
+                        });
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void deleteOrphanTags(ArrayList<String> tags) {
+            CollectionReference query = db.collection("diary-entry");
+            ArrayList<String> orphans = new ArrayList<>(tags);
+            Set<String> storedTagSet = new HashSet<>();
+
+            if(tags.size() > 0) {
+                query.whereEqualTo("uid", user.getUid())
+                        .whereArrayContainsAny("tag-list", tags);
+                query.get(Source.CACHE).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                    @Override
+                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                        if (task.isSuccessful()) {
+                            for (QueryDocumentSnapshot doc : task.getResult()) {
+                                Map<String, Object> data = doc.getData();
+
+                                if(data.get("deleted") != null && !(boolean)data.get("deleted")) {
+                                    ArrayList<String> tagList = (ArrayList<String>)data.get("tag-list");
+
+                                    for(String tag: tagList) {
+                                        storedTagSet.add(tag);
+                                    }
+                                }
+                            }
+
+                            orphans.removeAll(storedTagSet);
+                            String orphansCSV = TextUtils.join(",", orphans);
+                            runJS(String.format("taggerlog.removeTags('%s');", orphansCSV), new ValueCallback<String>() {
+                                @Override
+                                public void onReceiveValue(String s) {
+                                    saveTags();
+                                }
+                            });
+                        }
+                        else {
+                            Log.e("findOrphanTags", task.getException().toString());
+                        }
+                    }
+                });
+            }
         }
 
         @JavascriptInterface
@@ -215,7 +317,7 @@ public class MainActivity extends AppCompatActivity {
                     });
         }
 
-        public void runJavascript(String js, ValueCallback<String> valueCallback) {
+        public void runJS(String js, ValueCallback<String> valueCallback) {
             webView.post(new Runnable() {
                 @Override
                 public void run() {
@@ -312,7 +414,7 @@ public class MainActivity extends AppCompatActivity {
 
                              s = cleanReceivedJSON(s);
                              List<String> queryTags = gson.fromJson(s, new TypeToken<List<String>>(){}.getType());
-                             Log.d("qt", queryTags.toString());
+
                              if(queryTags.size() > 0) {
                                  q = q.whereArrayContainsAny("tag-list", queryTags);
                              }

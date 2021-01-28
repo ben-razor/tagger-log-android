@@ -60,8 +60,11 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -347,7 +350,8 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onComplete(@NonNull Task<QuerySnapshot> task) {
                     if(task.isSuccessful()) {
-                        Date mostRecentModify = new Date(1955, 10, 21, 6, 15, 0);
+                        Date mostRecentModify = new Date(0L);
+
                         int numCachedEntries = task.getResult().size();
 
                         for(QueryDocumentSnapshot doc : task.getResult()) {
@@ -369,7 +373,8 @@ public class MainActivity extends AppCompatActivity {
                                 .whereEqualTo("uid", user.getUid());
 
                         if(numCachedEntries > 0) {
-                            q.whereGreaterThan("date-modified", mostRecentModify);
+                            Timestamp ts = new Timestamp(mostRecentModify);
+                            q = q.whereGreaterThan("date-modified", ts);
                         }
 
                         q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
@@ -411,7 +416,7 @@ public class MainActivity extends AppCompatActivity {
                              Query q = db.collection("diary-entry")
                                      .orderBy("date", Query.Direction.DESCENDING)
                                      .whereEqualTo("uid", user.getUid())
-                                     .limit(10);
+                                     .whereEqualTo("deleted", false);
 
                              s = cleanReceivedJSON(s);
                              List<String> queryTags = gson.fromJson(s, new TypeToken<List<String>>(){}.getType());

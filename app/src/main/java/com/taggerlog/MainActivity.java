@@ -162,6 +162,7 @@ public class MainActivity extends AppCompatActivity {
             dataUpdate.put("date-modified", FieldValue.serverTimestamp());
             dataUpdate.put("tag-list", e.tagList);
             dataUpdate.put("uid", user.getUid());
+            dataUpdate.put("deleted", false);
             CollectionReference diaryEntryRef = db.collection("diary-entry");
             CollectionReference tagsColRef = db.collection("diary-tags");
             DocumentReference newEntryRef = diaryEntryRef.document();

@@ -77,6 +77,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Gson gson;
     private FirebaseAuth mAuth;
+    private FirebaseAuth.AuthStateListener mAuthListener;
     private FirebaseFirestore db;
     private FirebaseUser user;
     private WebView webView;
@@ -98,11 +99,30 @@ public class MainActivity extends AppCompatActivity {
         webView.addJavascriptInterface(new TaggerLogInterface(this), "AndroidInterface");
         webSettings.setDomStorageEnabled(true);
         webView.loadUrl("file:///android_asset/web/index.html");
+
+        initAuthListener();
+    }
+
+    protected void initAuthListener() {
+        mAuth = FirebaseAuth.getInstance();
+        mAuthListener = new FirebaseAuth.AuthStateListener() {
+            @Override
+            public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+                user = mAuth.getCurrentUser();
+                setUser(user);
+            }
+        };
     }
 
     @Override
     public void onStart() {
         super.onStart();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        user = mAuth.getCurrentUser();
     }
 
     /**
@@ -121,6 +141,7 @@ public class MainActivity extends AppCompatActivity {
             webView.post(new Runnable() {
                 @Override
                 public void run() {
+                    setUser(user);
                     webView.evaluateJavascript("taggerlog.init();", null);
                 }
             });
@@ -563,24 +584,27 @@ public class MainActivity extends AppCompatActivity {
             IdpResponse response = IdpResponse.fromResultIntent(data);
 
             if (resultCode == RESULT_OK) {
-                // Successfully signed in
                 user = FirebaseAuth.getInstance().getCurrentUser();
-
-                gson = new Gson();
-                Map<String, String> userData = new HashMap<String, String>();
-                userData.put("uid", user.getUid());
-                userData.put("displayName", user.getDisplayName());
-                userData.put("email", user.getEmail());
-                userData.put("photoURL", user.getPhotoUrl().toString());
-                String json = gson.toJson(userData);
-                webView.evaluateJavascript(String.format("taggerlog.setUser(JSON.parse('%s'));", json), null);
-                // ...
+                setUser(user);
             } else {
                 // Sign in failed. If response is null the user canceled the
                 // sign-in flow using the back button. Otherwise check
                 // response.getError().getErrorCode() and handle the error.
                 // ...
             }
+        }
+    }
+
+    protected void setUser(FirebaseUser user) {
+        if(user != null) {
+            gson = new Gson();
+            Map<String, String> userData = new HashMap<String, String>();
+            userData.put("uid", user.getUid());
+            userData.put("displayName", user.getDisplayName());
+            userData.put("email", user.getEmail());
+            userData.put("photoURL", user.getPhotoUrl().toString());
+            String json = gson.toJson(userData);
+            webView.evaluateJavascript(String.format("taggerlog.setUser(JSON.parse('%s'));", json), null);
         }
     }
 }

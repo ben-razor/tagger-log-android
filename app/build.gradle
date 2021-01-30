@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.taggerlog"
-        minSdkVersion 23
+        minSdkVersion 22
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"

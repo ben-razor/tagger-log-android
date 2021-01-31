@@ -425,8 +425,18 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        /**
+         * Get entries from firestore.
+         *
+         * Tries cache first, then server for any records modified after the most recent
+         * cache entry.
+         *
+         * If fullReload is true. Gets all records from server instead.
+         *
+         * @param fullReload Whether to reload all records from server.
+         */
         @JavascriptInterface
-        public void getEntries() {
+        public void getEntries(boolean fullReload) {
             webView.post(new Runnable() {
                 @Override
                 public void run() {

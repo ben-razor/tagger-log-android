@@ -494,35 +494,40 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void getTags() {
-           db.collection("diary-tags").document(user.getUid())
-                   .get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
-               @Override
-               public void onComplete(@NonNull Task<DocumentSnapshot> task) {
-                   if (task.isSuccessful()) {
-                       DocumentSnapshot doc = task.getResult();
-                       Map<String, Object> data = doc.getData();
-                       String tags = (String)data.get("tags");
-                       webView.evaluateJavascript(String.format("taggerlog.setAllTags('%s');", tags), null);
-                   }
+           runTagQuery(Source.CACHE);
+           runTagQuery(Source.SERVER);
+        }
 
-                   db.collection("diary-tag-combos").document(user.getUid())
-                           .get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
-                       @Override
-                       public void onComplete(@NonNull Task<DocumentSnapshot> task) {
-                           if (task.isSuccessful()) {
-                               DocumentSnapshot doc = task.getResult();
-                               Map<String, Object> data = doc.getData();
-                               String dataJSON = gson.toJson(data.get("tag-combos"));
+        public void runTagQuery(Source source) {
+            db.collection("diary-tags").document(user.getUid())
+                    .get(source).addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
+                @Override
+                public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                    if (task.isSuccessful()) {
+                        DocumentSnapshot doc = task.getResult();
+                        Map<String, Object> data = doc.getData();
+                        String tags = (String)data.get("tags");
+                        webView.evaluateJavascript(String.format("taggerlog.setAllTags('%s');", tags), null);
+                    }
+
+                    db.collection("diary-tag-combos").document(user.getUid())
+                            .get(source).addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
+                        @Override
+                        public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                            if (task.isSuccessful()) {
+                                DocumentSnapshot doc = task.getResult();
+                                Map<String, Object> data = doc.getData();
+                                String dataJSON = gson.toJson(data.get("tag-combos"));
 
                                 webView.evaluateJavascript(
                                         String.format("taggerlog.setTagCombos('%s', true);", dataJSON),
-                                null
+                                        null
                                 );
-                           }
-                       }
-                   });
-               }
-           });
+                            }
+                        }
+                    });
+                }
+            });
         }
 
         class TagCombo {

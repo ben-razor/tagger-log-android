@@ -366,60 +366,86 @@ public class MainActivity extends AppCompatActivity {
                     .replace("\\\"", "\"");
         }
 
-        public void runGetEntriesQuery(Query q) {
+        public void runGetEntriesQuery(Query q, List<String> queryTags, boolean doReload) {
             q.get(Source.CACHE).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                 @Override
                 public void onComplete(@NonNull Task<QuerySnapshot> task) {
                     if(task.isSuccessful()) {
-                        Date mostRecentModify = new Date(0L);
 
-                        int numCachedEntries = task.getResult().size();
-
-                        for(QueryDocumentSnapshot doc : task.getResult()) {
-                            Map<String, Object> data = doc.getData();
-                            Date dateModified = ((Timestamp)data.get("date-modified")).toDate();
-                            String json = entryToJSON(doc.getId(), data);
-
-                            webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
-
-                            if(dateModified.getTime() > mostRecentModify.getTime()) {
-                                mostRecentModify = dateModified;
-                            }
+                        if(doReload) {
+                            getEntriesFromServer(null, queryTags);
                         }
-                        webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
-                        webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+                        else {
+                            Date mostRecentModify = new Date(0L);
 
-                        Query q = db.collection("diary-entry")
-                                .orderBy("date-modified", Query.Direction.DESCENDING)
-                                .whereEqualTo("uid", user.getUid());
+                            int numCachedEntries = task.getResult().size();
 
-                        if(numCachedEntries > 0) {
-                            Timestamp ts = new Timestamp(mostRecentModify);
-                            q = q.whereGreaterThan("date-modified", ts);
-                        }
+                            for(QueryDocumentSnapshot doc : task.getResult()) {
+                                Map<String, Object> data = doc.getData();
+                                Date dateModified = ((Timestamp)data.get("date-modified")).toDate();
+                                String json = entryToJSON(doc.getId(), data);
 
-                        q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
-                            @Override
-                            public void onComplete(@NonNull Task<QuerySnapshot> task) {
-                                if (task.isSuccessful()) {
-                                    if(task.getResult().size() > 0) {
-                                        for(QueryDocumentSnapshot doc : task.getResult()) {
-                                            Map<String, Object> data = doc.getData();
-                                            String json = entryToJSON(doc.getId(), data);
+                                webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
 
-                                            webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
-                                        }
-
-                                        webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
-                                        webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
-                                    }
-                                    webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+                                if(dateModified.getTime() > mostRecentModify.getTime()) {
+                                    mostRecentModify = dateModified;
                                 }
                             }
-                        });
+                            webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
+                            webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+
+                            Date startDate = null;
+                            if(numCachedEntries > 0) {
+                                startDate = mostRecentModify;
+                            }
+
+                            getEntriesFromServer(startDate, null);
+                        }
                     }
                     else {
                         Log.w(TAG, "Error getting documents.", task.getException());
+                    }
+                }
+            });
+        }
+
+        /**
+         * Gets entries from the server, no cache.
+         *
+         * @param startDate Only get records modified after this date. If null, get all.
+         * @param queryTags Only get records containing these tags. If null, get all.
+         */
+        public void getEntriesFromServer(Date startDate, List<String> queryTags) {
+
+            Query q = db.collection("diary-entry")
+                    .orderBy("date-modified", Query.Direction.DESCENDING)
+                    .whereEqualTo("uid", user.getUid());
+
+            if(startDate != null) {
+                Timestamp ts = new Timestamp(startDate);
+                q = q.whereGreaterThan("date-modified", ts);
+            }
+
+            if(queryTags != null && queryTags.size() > 0) {
+                q = q.whereArrayContainsAny("tag-list", queryTags);
+            }
+
+            q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                @Override
+                public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                    if (task.isSuccessful()) {
+                        if(task.getResult().size() > 0) {
+                            for(QueryDocumentSnapshot doc : task.getResult()) {
+                                Map<String, Object> data = doc.getData();
+                                String json = entryToJSON(doc.getId(), data);
+
+                                webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+                            }
+
+                            webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
+                            webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
+                        }
+                        webView.evaluateJavascript(String.format("taggerlog.refreshUI();"), null);
                     }
                 }
             });
@@ -433,10 +459,10 @@ public class MainActivity extends AppCompatActivity {
          *
          * If fullReload is true. Gets all records from server instead.
          *
-         * @param fullReload Whether to reload all records from server.
+         * @param doReload Whether to reload all records from server.
          */
         @JavascriptInterface
-        public void getEntries(boolean fullReload) {
+        public void getEntries(boolean doReload) {
             webView.post(new Runnable() {
                 @Override
                 public void run() {
@@ -459,7 +485,7 @@ public class MainActivity extends AppCompatActivity {
                                  q = q.limit(10);
                              }
 
-                             runGetEntriesQuery(q);
+                             runGetEntriesQuery(q, queryTags, doReload);
                          }
                      });
                  }

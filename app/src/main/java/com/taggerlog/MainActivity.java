@@ -125,6 +125,15 @@ public class MainActivity extends AppCompatActivity {
         user = mAuth.getCurrentUser();
     }
 
+    public void runJS(String js, ValueCallback<String> valueCallback) {
+        webView.post(new Runnable() {
+            @Override
+            public void run() {
+                webView.evaluateJavascript(js, valueCallback);
+            }
+        });
+    }
+
     /**
      * Javascript interface for use by the WebView
     */
@@ -138,13 +147,10 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void init() {
-            webView.post(new Runnable() {
-                @Override
-                public void run() {
-                    setUser(user);
-                    webView.evaluateJavascript("taggerlog.init();", null);
-                }
-            });
+            if(user != null) {
+                setUser(user);
+            }
+            runJS("taggerlog.init()", null);
         }
 
         @JavascriptInterface
@@ -342,15 +348,6 @@ public class MainActivity extends AppCompatActivity {
                     });
         }
 
-        public void runJS(String js, ValueCallback<String> valueCallback) {
-            webView.post(new Runnable() {
-                @Override
-                public void run() {
-                    webView.evaluateJavascript(js, valueCallback);
-                }
-            });
-        }
-
         /**
          * WebView.evaluateJavascript returns an escaped string wrapped in double quotes.
          *
@@ -382,13 +379,16 @@ public class MainActivity extends AppCompatActivity {
 
                             for(QueryDocumentSnapshot doc : task.getResult()) {
                                 Map<String, Object> data = doc.getData();
-                                Date dateModified = ((Timestamp)data.get("date-modified")).toDate();
-                                String json = entryToJSON(doc.getId(), data);
+                                Timestamp modifiedTS = (Timestamp)data.get("date-modified");
+                                if(modifiedTS != null) {
+                                    Date dateModified = modifiedTS.toDate();
+                                    String json = entryToJSON(doc.getId(), data);
 
-                                webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+                                    webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
 
-                                if(dateModified.getTime() > mostRecentModify.getTime()) {
-                                    mostRecentModify = dateModified;
+                                    if(dateModified.getTime() > mostRecentModify.getTime()) {
+                                        mostRecentModify = dateModified;
+                                    }
                                 }
                             }
                             webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
@@ -437,9 +437,12 @@ public class MainActivity extends AppCompatActivity {
                         if(task.getResult().size() > 0) {
                             for(QueryDocumentSnapshot doc : task.getResult()) {
                                 Map<String, Object> data = doc.getData();
-                                String json = entryToJSON(doc.getId(), data);
+                                Timestamp modifiedTS = (Timestamp)data.get("date-modified");
+                                if(modifiedTS != null) {
+                                    String json = entryToJSON(doc.getId(), data);
 
-                                webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+                                    webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+                                }
                             }
 
                             webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
@@ -626,7 +629,9 @@ public class MainActivity extends AppCompatActivity {
 
             if (resultCode == RESULT_OK) {
                 user = FirebaseAuth.getInstance().getCurrentUser();
+                String newUserStr = Boolean.toString(response.isNewUser());
                 setUser(user);
+                runJS(String.format("taggerlog.init(%s);", newUserStr), null);
             } else {
                 // Sign in failed. If response is null the user canceled the
                 // sign-in flow using the back button. Otherwise check
@@ -643,9 +648,13 @@ public class MainActivity extends AppCompatActivity {
             userData.put("uid", user.getUid());
             userData.put("displayName", user.getDisplayName());
             userData.put("email", user.getEmail());
-            userData.put("photoURL", user.getPhotoUrl().toString());
+            String photoUrl = "";
+            if(user.getPhotoUrl() != null) {
+                photoUrl = user.getPhotoUrl().toString();
+            }
+            userData.put("photoURL", photoUrl);
             String json = gson.toJson(userData);
-            webView.evaluateJavascript(String.format("taggerlog.setUser(JSON.parse('%s'));", json), null);
+            runJS(String.format("taggerlog.setUser(JSON.parse('%s'));", json), null);
         }
     }
 }

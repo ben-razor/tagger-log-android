@@ -429,6 +429,9 @@ public class MainActivity extends AppCompatActivity {
             if(queryTags != null && queryTags.size() > 0) {
                 q = q.whereArrayContainsAny("tag-list", queryTags);
             }
+            else {
+                q = q.limit(10);
+            }
 
             q.get(Source.SERVER).addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                 @Override

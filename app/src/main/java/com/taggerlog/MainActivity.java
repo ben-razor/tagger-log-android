@@ -616,7 +616,7 @@ public class MainActivity extends AppCompatActivity {
          */
         public String dateToISO(Date d) {
             SimpleDateFormat sdf;
-            sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+            sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ");
             sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
             String text = sdf.format(d);
             return text;

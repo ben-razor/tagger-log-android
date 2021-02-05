@@ -380,12 +380,12 @@ public class MainActivity extends AppCompatActivity {
                             for(QueryDocumentSnapshot doc : task.getResult()) {
                                 Map<String, Object> data = doc.getData();
                                 Timestamp modifiedTS = (Timestamp)data.get("date-modified");
+                                String json = entryToJSON(doc.getId(), data);
+
+                                webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
+
                                 if(modifiedTS != null) {
                                     Date dateModified = modifiedTS.toDate();
-                                    String json = entryToJSON(doc.getId(), data);
-
-                                    webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
-
                                     if(dateModified.getTime() > mostRecentModify.getTime()) {
                                         mostRecentModify = dateModified;
                                     }
@@ -440,12 +440,8 @@ public class MainActivity extends AppCompatActivity {
                         if(task.getResult().size() > 0) {
                             for(QueryDocumentSnapshot doc : task.getResult()) {
                                 Map<String, Object> data = doc.getData();
-                                Timestamp modifiedTS = (Timestamp)data.get("date-modified");
-                                if(modifiedTS != null) {
-                                    String json = entryToJSON(doc.getId(), data);
-
-                                    webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
-                                }
+                                String json = entryToJSON(doc.getId(), data);
+                                webView.evaluateJavascript(String.format("taggerlog.insertEntry('%s', true)", json), null);
                             }
 
                             webView.evaluateJavascript(String.format("taggerlog.updateQueryRelatedTags();"), null);
@@ -577,12 +573,20 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        /**
+         * Converts entry data from an internal dictionary to a JSON representation that
+         * is used internally by tagger log.
+         *
+         * The data-modified field is not copied from the internal dictionary as this is
+         * only used for internal functions.
+         *
+         * @param id ID of the entry
+         * @param data An internal Map of entry information.
+         * @return The JSON version of the entry in tagger log entry format.
+         */
         public String entryToJSON(String id, Map<String, Object> data) {
             Timestamp dateTS = (Timestamp)data.get("date");
-            Timestamp dateModifiedTS = (Timestamp)data.get("date-modified");
-            Date dateModified = dateModifiedTS.toDate();
             data.put("date", dateToISO(dateTS.toDate()));
-            data.put("date-modified", dateToISO(dateModifiedTS.toDate()));
             data.put("entry", data.get("entry").toString().replaceAll("\\n", "\\\\n"));
             data.put("id", id);
 

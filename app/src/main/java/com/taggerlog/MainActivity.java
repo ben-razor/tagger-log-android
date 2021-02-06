@@ -574,6 +574,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         /**
+         * Escapes reserved JSON characters.
+         *
+         * @param raw String of JSON
+         * @return String of JSON with special characters escaped
+         */
+        private String JSONEscape(String raw) {
+            String escaped = raw;
+            escaped = escaped.replace("\\", "\\\\");
+            escaped = escaped.replace("\"", "\\\"");
+            escaped = escaped.replace("\b", "\\b");
+            escaped = escaped.replace("\f", "\\f");
+            escaped = escaped.replace("\n", "\\n");
+            escaped = escaped.replace("\r", "\\r");
+            escaped = escaped.replace("\t", "\\t");
+            return escaped;
+        }
+
+        /**
          * Converts entry data from an internal dictionary to a JSON representation that
          * is used internally by tagger log.
          *
@@ -587,7 +605,7 @@ public class MainActivity extends AppCompatActivity {
         public String entryToJSON(String id, Map<String, Object> data) {
             Timestamp dateTS = (Timestamp)data.get("date");
             data.put("date", dateToISO(dateTS.toDate()));
-            data.put("entry", data.get("entry").toString().replaceAll("\\n", "\\\\n"));
+            data.put("entry", JSONEscape(data.get("entry").toString()));
             data.put("id", id);
 
             String json = gson.toJson(data);

@@ -264,7 +264,7 @@ public class MainActivity extends AppCompatActivity {
                         .addOnSuccessListener(new OnSuccessListener<Void>() {
                             @Override
                             public void onSuccess(Void aVoid) {
-                                runJS("taggerlog.saveTagsRefresh()", null);
+                                getEntries(false);
                             }
                         })
                         .addOnFailureListener(new OnFailureListener() {

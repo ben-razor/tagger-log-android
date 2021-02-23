@@ -13,7 +13,8 @@
         android:theme="@style/Theme.TaggerLog">
         <activity
             android:name=".MainActivity"
-            android:theme="@style/Theme.TaggerLog.NoActionBar">
+            android:theme="@style/Theme.TaggerLog.NoActionBar"
+            android:configChanges="screenSize|orientation|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

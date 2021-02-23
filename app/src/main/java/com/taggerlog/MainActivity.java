@@ -6,6 +6,7 @@ import androidx.constraintlayout.widget.ConstraintLayout;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Message;
@@ -123,6 +124,11 @@ public class MainActivity extends AppCompatActivity {
     public void onResume() {
         super.onResume();
         user = mAuth.getCurrentUser();
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
     }
 
     public void runJS(String js, ValueCallback<String> valueCallback) {
